@@ -41,11 +41,11 @@ export async function generateCaptionFromText(prompt: string) {
       messages: [
         {
           role: "system",
-          content: `Write a ${requirements.style} social media caption (${requirements.lines} lines max). ${requirements.includeEmojis ? 'Add 1-2 relevant emojis.' : 'No emojis.'} Be direct and engaging. Just write the caption.`,
+          content: `Write a ${requirements.style} Instagram caption a real person would post (${requirements.lines} lines max). First person, casual, specific. Never write Line 1/Line 2. No generic "feeling proud" filler. ${requirements.includeEmojis ? "0-2 emojis max." : "No emojis."} Output only the caption.`,
         },
         {
           role: "user",
-          content: `Topic: ${prompt}`,
+          content: `Write a caption I would actually post about this:\n${prompt}`,
         },
       ],
       model: GROQ_MODEL,
@@ -85,11 +85,11 @@ export async function improveCaption(currentCaption: string) {
       messages: [
         {
           role: "system",
-          content: `Improve this social media caption to be more impactful and concise. Keep it 1-2 lines max. Remove filler words. Write naturally. Just give the improved version.`,
+          content: `Rewrite this caption so it sounds like a real person posted it. Keep the details. Casual, first person. Never write Line 1/Line 2. No generic filler. 1-2 lines max. Output only the caption.`,
         },
         {
           role: "user",
-          content: `Improve: "${currentCaption}"`,
+          content: `Rewrite this so it sounds like I actually posted it. Keep my details:\n${currentCaption}`,
         },
       ],
       model: GROQ_MODEL,

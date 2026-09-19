@@ -34,6 +34,19 @@ async function NotificationsList() {
     }
   };
 
+  const getNotificationText = (type: string) => {
+    switch (type) {
+      case "FOLLOW":
+        return "started following you";
+      case "LIKE":
+        return "liked your post";
+      case "COMMENT":
+        return "commented on your post";
+      default:
+        return "sent you a notification";
+    }
+  };
+
   if (notifications.length === 0) {
     return <div className="p-4 text-center text-muted-foreground">No notifications yet</div>;
   }
@@ -55,21 +68,17 @@ async function NotificationsList() {
               />
             </Avatar>
           </Link>
-          <div className="flex-1 space-y-1">
-            <div className="flex items-center gap-2">
-              {getNotificationIcon(notification.type)}
-              <span>
+          <div className="flex-1 min-w-0 space-y-1">
+            <div className="flex items-start gap-2">
+              <span className="mt-0.5 shrink-0">{getNotificationIcon(notification.type)}</span>
+              <span className="min-w-0 break-words">
                 <Link
                   href={`/profile/${notification.creator.username}`}
                   className="font-medium hover:underline"
                 >
                   {notification.creator.username}
                 </Link>{" "}
-                {notification.type === "FOLLOW"
-                  ? "started following you"
-                  : notification.type === "LIKE"
-                  ? "liked your post"
-                  : "commented on your post"}
+                {getNotificationText(notification.type)}
               </span>
             </div>
 

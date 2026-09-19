@@ -5,12 +5,11 @@ import { useState } from "react";
 import { Card, CardContent } from "./ui/card";
 import { Avatar, AvatarImage } from "./ui/avatar";
 import { Textarea } from "./ui/textarea";
-import { ImageIcon, Loader2Icon, SendIcon, SparklesIcon, WandIcon, XIcon } from "lucide-react";
+import { ImageIcon, Loader2Icon, SendIcon, SparklesIcon, WandIcon } from "lucide-react";
 import { Button } from "./ui/button";
 import { createPost } from "@/actions/post.action";
 import ImageUpload from "./ImageUpload";
 import { toast } from "sonner";
-import { Input } from "./ui/input";
 
 function CreatePost() {
   const { user } = useUser();
@@ -18,11 +17,8 @@ function CreatePost() {
   const [imageUrl, setImageUrl] = useState("");
   const [isPosting, setIsPosting] = useState(false);
   const [showImageUpload, setShowImageUpload] = useState(false);
-  
-  // AI states
-  const [showAIPrompt, setShowAIPrompt] = useState(false);
-  const [aiPrompt, setAiPrompt] = useState("");
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [aiMode, setAiMode] = useState<"generate" | "improve" | null>(null);
+  const isGenerating = aiMode !== null;
 
   // API call function for AI
   const callAIApi = async (prompt: string, action: 'generate' | 'improve' = 'generate') => {
@@ -61,8 +57,6 @@ function CreatePost() {
         setContent("");
         setImageUrl("");
         setShowImageUpload(false);
-        setShowAIPrompt(false);
-        setAiPrompt("");
         toast.success("Post created successfully");
       }
     } catch (error) {
@@ -74,19 +68,17 @@ function CreatePost() {
   };
 
   const handleGenerateFromText = async () => {
-    if (!aiPrompt.trim()) {
-      toast.error("Please enter a prompt");
+    if (!content.trim()) {
+      toast.error("Write something in the box first");
       return;
     }
 
-    setIsGenerating(true);
+    setAiMode("generate");
     try {
-      const result = await callAIApi(aiPrompt, 'generate');
+      const result = await callAIApi(content, 'generate');
       
       if (result.success && result.caption) {
         setContent(result.caption);
-        setShowAIPrompt(false);
-        setAiPrompt("");
         toast.success("Caption generated! ✨");
       } else {
         toast.error(result.error || "Failed to generate caption");
@@ -95,7 +87,7 @@ function CreatePost() {
       console.error("Generate Error:", error);
       toast.error(error.message || "Network error. Check your connection.");
     } finally {
-      setIsGenerating(false);
+      setAiMode(null);
     }
   };
 
@@ -105,7 +97,7 @@ function CreatePost() {
       return;
     }
 
-    setIsGenerating(true);
+    setAiMode("improve");
     try {
       const result = await callAIApi(content, 'improve');
       
@@ -119,7 +111,7 @@ function CreatePost() {
       console.error("Improve Error:", error);
       toast.error(error.message || "Network error. Check your connection.");
     } finally {
-      setIsGenerating(false);
+      setAiMode(null);
     }
   };
 
@@ -134,7 +126,7 @@ function CreatePost() {
             </Avatar>
             <div className="flex-1 min-w-0">
               <Textarea
-                placeholder="What's on your mind?"
+                placeholder="What's on your mind? Type here, then tap Generate."
                 className="min-h-[80px] sm:min-h-[100px] resize-none border-none focus-visible:ring-0 p-0 text-sm sm:text-base"
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
@@ -142,67 +134,6 @@ function CreatePost() {
               />
             </div>
           </div>
-
-          {/* AI PROMPT SECTION */}
-          {showAIPrompt && (
-            <div className="border rounded-lg p-3 sm:p-4 bg-white dark:bg-zinc-900 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <SparklesIcon className="size-4 sm:size-5 text-black dark:text-white" />
-                  <span className="font-medium text-xs sm:text-sm text-black dark:text-white">AI Caption Generator</span>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setShowAIPrompt(false);
-                    setAiPrompt("");
-                  }}
-                  disabled={isGenerating}
-                  className="text-black dark:text-white hover:bg-black/5 dark:hover:bg-white/10 h-8 w-8 p-0"
-                >
-                  <XIcon className="size-4" />
-                </Button>
-              </div>
-              
-              {/* In the AI Prompt section, update: */}
-<Input
-  placeholder="Describe what you want to post about... (e.g., '2 lines about coffee', 'funny caption for Monday', 'inspirational quote about success')"
-  value={aiPrompt}
-  onChange={(e) => setAiPrompt(e.target.value)}
-  disabled={isGenerating}
-  className="bg-black/5 dark:bg-white/10 border-black/10 dark:border-white/20 text-black dark:text-white placeholder:text-black/60 dark:placeholder:text-white/60 text-sm sm:text-base h-9 sm:h-10"
-  onKeyDown={(e) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      if (aiPrompt.trim() && !isGenerating) {
-        handleGenerateFromText();
-      }
-    }
-  }}
-/>
-
-              <Button
-                size="sm"
-                onClick={handleGenerateFromText}
-                disabled={isGenerating || !aiPrompt.trim()}
-                className="w-full bg-black dark:bg-white text-white dark:text-black hover:bg-black/90 dark:hover:bg-white/90 h-9 sm:h-10 text-sm sm:text-base"
-                type="button"
-              >
-                {isGenerating ? (
-                  <>
-                    <Loader2Icon className="size-4 mr-2 animate-spin" />
-                    Generating...
-                  </>
-                ) : (
-                  <>
-                    <SparklesIcon className="size-4 mr-2" />
-                    Generate Caption
-                  </>
-                )}
-              </Button>
-            </div>
-          )}
 
           {/* IMAGE UPLOAD SECTION */}
           {(showImageUpload || imageUrl) && (
@@ -220,53 +151,47 @@ function CreatePost() {
           )}
 
           {/* ACTION BUTTONS */}
-          <div className="flex flex-col sm:flex-row gap-3">
-            {/* First Row: Image, Generate, Improve (Mobile) / All actions (Desktop) */}
-            <div className="flex items-center justify-between sm:justify-start gap-2 w-full sm:w-auto">
-              {/* Image Button */}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="grid w-full min-w-0 grid-cols-3 gap-1 sm:flex sm:w-auto sm:gap-2">
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="flex-1 sm:flex-none text-muted-foreground hover:text-primary h-9 px-2 sm:px-3 text-sm"
+                className="h-9 min-w-0 px-2 text-xs sm:flex-none sm:px-3 sm:text-sm text-muted-foreground hover:text-primary"
                 onClick={() => setShowImageUpload(!showImageUpload)}
                 disabled={isPosting || isGenerating}
               >
-                <ImageIcon className="size-4 mr-1 sm:mr-2" />
-                <span className="sm:inline">Photo</span>
+                <ImageIcon className="size-4 shrink-0" />
+                <span className="truncate">Photo</span>
               </Button>
 
-              {/* Generate Button */}
-              {!showAIPrompt && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="flex-1 sm:flex-none text-muted-foreground hover:text-purple-500 h-9 px-2 sm:px-3 text-sm"
-                  onClick={() => setShowAIPrompt(true)}
-                  disabled={isPosting || isGenerating}
-                >
-                  <SparklesIcon className="size-4 mr-1 sm:mr-2" />
-                  <span className="sm:inline">Generate</span>
-                </Button>
-              )}
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-9 min-w-0 px-2 text-xs sm:flex-none sm:px-3 sm:text-sm text-muted-foreground hover:text-purple-500"
+                onClick={handleGenerateFromText}
+                disabled={isPosting || isGenerating || !content.trim()}
+              >
+                <SparklesIcon className="size-4 shrink-0" />
+                <span className="truncate">
+                  {aiMode === "generate" ? "Generating..." : "Generate"}
+                </span>
+              </Button>
 
-              {/* Improve Button */}
-              {content.trim() && !showAIPrompt && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="flex-1 sm:flex-none text-muted-foreground hover:text-blue-500 h-9 px-2 sm:px-3 text-sm"
-                  onClick={handleImproveCaption}
-                  disabled={isPosting || isGenerating}
-                >
-                  <WandIcon className="size-4 mr-1 sm:mr-2" />
-                  <span className="sm:inline">
-                    {isGenerating ? "Improving..." : "Improve"}
-                  </span>
-                </Button>
-              )}
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-9 min-w-0 px-2 text-xs sm:flex-none sm:px-3 sm:text-sm text-muted-foreground hover:text-blue-500 disabled:opacity-40"
+                onClick={handleImproveCaption}
+                disabled={isPosting || isGenerating || !content.trim()}
+              >
+                <WandIcon className="size-4 shrink-0" />
+                <span className="truncate">
+                  {aiMode === "improve" ? "Improving..." : "Improve"}
+                </span>
+              </Button>
             </div>
 
             {/* Post Button */}

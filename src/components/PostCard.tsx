@@ -9,7 +9,7 @@ import { Avatar, AvatarImage } from './ui/avatar';
 import { formatDistanceToNow } from 'date-fns';
 import {DeleteAlertDialog} from './DeleteAlertDialog';
 import { Button } from './ui/button';
-import { HeartIcon, LogInIcon, MessageCircleIcon, SendIcon } from 'lucide-react';
+import { HeartIcon, LogInIcon, MessageCircleIcon, SendIcon, SparklesIcon, WandIcon } from 'lucide-react';
 import { Textarea } from './ui/textarea';
 
 type Posts = Awaited<ReturnType<typeof getPosts>>;
@@ -42,6 +42,50 @@ function PostCard({ post, dbUserId, currentUserId, onDelete, showDelete = true }
   
   const [optimisticLikes, setOptimisticLikes] = useState(post._count.likes || 0);
   const [showComments, setShowComments] = useState(false);
+  const [commentAiMode, setCommentAiMode] = useState<"generate" | "improve" | null>(null);
+  const isCommentAiBusy = commentAiMode !== null;
+
+  const callCommentAI = async (action: "generate" | "improve") => {
+    const response = await fetch("/api/ai/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        prompt: newComment,
+        action,
+        kind: "comment",
+        postContent: post.content || "",
+        postAuthor: post.author.username || post.author.name || "",
+      }),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || `Request failed: ${response.status}`);
+    }
+    return data;
+  };
+
+  const handleCommentAI = async (action: "generate" | "improve") => {
+    if (action === "improve" && !newComment.trim()) {
+      toast.error("Write a comment first to improve it");
+      return;
+    }
+
+    setCommentAiMode(action);
+    try {
+      const result = await callCommentAI(action);
+      if (result.success && result.caption) {
+        setNewComment(result.caption);
+        toast.success(action === "improve" ? "Comment improved! ✨" : "Comment generated! ✨");
+      } else {
+        toast.error(result.error || "Failed to update comment");
+      }
+    } catch (error: any) {
+      toast.error(error.message || "Failed to update comment");
+    } finally {
+      setCommentAiMode(null);
+    }
+  };
 
   const handleLike = async () => {
     if (isLiking || !user) return;
@@ -218,17 +262,46 @@ function PostCard({ post, dbUserId, currentUserId, onDelete, showDelete = true }
                   </Avatar>
                   <div className="flex-1">
                     <Textarea
-                      placeholder="Write a comment..."
+                      placeholder="Write a comment, or tap Generate..."
                       value={newComment}
                       onChange={(e) => setNewComment(e.target.value)}
                       className="min-h-[80px] resize-none"
+                      disabled={isCommenting || isCommentAiBusy}
                     />
-                    <div className="flex justify-end mt-2">
+                    <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
+                      <div className="grid w-full min-w-0 grid-cols-2 gap-1 sm:flex sm:w-auto sm:gap-2">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-9 min-w-0 px-2 text-xs sm:flex-none sm:px-3 sm:text-sm text-muted-foreground hover:text-purple-500"
+                          onClick={() => handleCommentAI("generate")}
+                          disabled={isCommenting || isCommentAiBusy}
+                        >
+                          <SparklesIcon className="size-4 shrink-0" />
+                          <span className="truncate">
+                            {commentAiMode === "generate" ? "Generating..." : "Generate"}
+                          </span>
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-9 min-w-0 px-2 text-xs sm:flex-none sm:px-3 sm:text-sm text-muted-foreground hover:text-blue-500"
+                          onClick={() => handleCommentAI("improve")}
+                          disabled={isCommenting || isCommentAiBusy || !newComment.trim()}
+                        >
+                          <WandIcon className="size-4 shrink-0" />
+                          <span className="truncate">
+                            {commentAiMode === "improve" ? "Improving..." : "Improve"}
+                          </span>
+                        </Button>
+                      </div>
                       <Button
                         size="sm"
                         onClick={handleComment}
-                        className="flex items-center gap-2"
-                        disabled={!newComment.trim() || isCommenting}
+                        className="w-full sm:ml-auto sm:w-auto flex items-center justify-center gap-2"
+                        disabled={!newComment.trim() || isCommenting || isCommentAiBusy}
                       >
                         {isCommenting ? (
                           "Posting..."

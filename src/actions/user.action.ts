@@ -183,6 +183,7 @@ export async function toggleFollow({ userId }: { userId: string }) {
     }
 
     revalidatePath("/");
+    revalidatePath("/notifications");
     return { success: true };
   } catch (error) {
     console.error("Failed to toggle follow", error);
