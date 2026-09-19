@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Groq from 'groq-sdk';
 
-const groq = new Groq({
-  apiKey: process.env.GROQ_API_KEY,
-});
+// llama-3.3-70b-versatile was retired by Groq on 2026-08-16 for free/dev accounts.
+const GROQ_MODEL = 'openai/gpt-oss-20b';
+
+function getGroqClient() {
+  return new Groq({
+    apiKey: process.env.GROQ_API_KEY,
+  });
+}
 
 // Strict line counter function
 function countLines(text: string): number {
@@ -42,6 +47,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const groq = getGroqClient();
     const promptLower = prompt.toLowerCase();
     let requestedLines = 2; // Default
     
@@ -80,9 +86,10 @@ Line 2: [Supporting thought or conclusion]`;
             content: `Make this caption exactly ${requestedLines} lines, first-person, and better: "${prompt}"`
           },
         ],
-        model: 'llama-3.3-70b-versatile',
-        temperature: 0.7, // Lower temp for more consistency
-        max_tokens: 100,
+        model: GROQ_MODEL,
+        temperature: 0.7,
+        max_tokens: 400,
+        reasoning_effort: 'low',
       });
 
       let caption = completion.choices[0]?.message?.content?.trim() || '';
@@ -136,9 +143,10 @@ ${requestedLines === 1 ? 'Just one impactful line with 1-2 emojis.' :
             content: `Write exactly ${requestedLines} first-person lines about: ${prompt}`
           },
         ],
-        model: 'llama-3.3-70b-versatile',
+        model: GROQ_MODEL,
         temperature: 0.75,
-        max_tokens: 120,
+        max_tokens: 400,
+        reasoning_effort: 'low',
       });
 
       let caption = completion.choices[0]?.message?.content?.trim() || '';
@@ -161,9 +169,10 @@ ${requestedLines === 1 ? 'Just one impactful line with 1-2 emojis.' :
               content: `Topic: ${prompt}`
             },
           ],
-          model: 'llama-3.3-70b-versatile',
-          temperature: 0.6, // Even lower temp for strict adherence
-          max_tokens: 80,
+          model: GROQ_MODEL,
+          temperature: 0.6,
+          max_tokens: 400,
+          reasoning_effort: 'low',
         });
         
         caption = strictCompletion.choices[0]?.message?.content?.trim() || '';
@@ -193,6 +202,9 @@ ${requestedLines === 1 ? 'Just one impactful line with 1-2 emojis.' :
     if (error.message?.includes('timeout')) errorMessage = 'Request timed out.';
     if (error.status === 429) errorMessage = 'Too many requests. Please wait.';
     if (error.status === 401) errorMessage = 'AI service issue.';
+    if (error.status === 404 || error.code === 'model_not_found') {
+      errorMessage = 'AI model is unavailable. Please try again later.';
+    }
     
     return NextResponse.json(
       { success: false, error: errorMessage },

@@ -2,9 +2,13 @@
 
 import Groq from "groq-sdk";
 
-const groq = new Groq({
-  apiKey: process.env.GROQ_API_KEY,
-});
+const GROQ_MODEL = "openai/gpt-oss-20b";
+
+function getGroqClient() {
+  return new Groq({
+    apiKey: process.env.GROQ_API_KEY,
+  });
+}
 
 function analyzeUserRequest(prompt: string) {
   const promptLower = prompt.toLowerCase();
@@ -31,6 +35,7 @@ export async function generateCaptionFromText(prompt: string) {
     }
 
     const requirements = analyzeUserRequest(prompt);
+    const groq = getGroqClient();
     
     const completion = await groq.chat.completions.create({
       messages: [
@@ -43,9 +48,10 @@ export async function generateCaptionFromText(prompt: string) {
           content: `Topic: ${prompt}`,
         },
       ],
-      model: "llama-3.3-70b-versatile",
+      model: GROQ_MODEL,
       temperature: 0.85,
-      max_tokens: 100,
+      max_tokens: 400,
+      reasoning_effort: "low",
     });
 
     const caption = completion.choices[0]?.message?.content?.trim() || "";
@@ -74,6 +80,7 @@ export async function improveCaption(currentCaption: string) {
       return { success: false, error: "AI service not configured" };
     }
 
+    const groq = getGroqClient();
     const completion = await groq.chat.completions.create({
       messages: [
         {
@@ -85,9 +92,10 @@ export async function improveCaption(currentCaption: string) {
           content: `Improve: "${currentCaption}"`,
         },
       ],
-      model: "llama-3.3-70b-versatile",
+      model: GROQ_MODEL,
       temperature: 0.8,
-      max_tokens: 100,
+      max_tokens: 400,
+      reasoning_effort: "low",
     });
 
     const caption = completion.choices[0]?.message?.content?.trim() || "";
