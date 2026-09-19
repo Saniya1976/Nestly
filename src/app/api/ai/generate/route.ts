@@ -81,8 +81,9 @@ Rules:
 - 1 short line. 2 lines max if needed. Never write Line 1 / Line 2.
 - Sound like a chat reply: casual, specific, a little messy in a human way.
 - Use 1-2 social slang words when they fit, like bro, brooo, dude, buddy, omg, hey, ngl, fr, lowkey, wait, yo, same, wild. Do not stuff them all in.
-- React to details in the post. If they drafted a comment, keep that meaning.
-- ${isImprove ? "Keep their point, just make it sound more like a real comment." : "If they gave a thought, turn it into a comment. If they did not, react to the post."}
+- React to details in the post. If this is a reply, react to that comment too.
+- If they drafted a comment, keep that meaning.
+- ${isImprove ? "Keep their point, just make it sound more like a real comment." : "If they gave a thought, turn it into a comment. If they did not, react to the post or the comment they are replying to."}
 - No corporate praise, no "that's amazing congratulations on this achievement", no hashtags, no quotes, no explanation.
 - 0-2 emojis max, only if they feel natural.`;
 }
@@ -92,18 +93,29 @@ function commentUserPrompt({
   prompt,
   postContent,
   postAuthor,
+  replyToComment,
+  replyToAuthor,
 }: {
   isImprove: boolean;
   prompt: string;
   postContent: string;
   postAuthor: string;
+  replyToComment: string;
+  replyToAuthor: string;
 }) {
   const postBit = `Post${postAuthor ? ` by @${postAuthor}` : ""}:\n${postContent || "(no text, maybe just a photo)"}`;
+  const replyBit = replyToComment
+    ? `\n\nThey are replying to @${replyToAuthor || "someone"} who said:\n${replyToComment}`
+    : "";
+
   if (isImprove) {
-    return `${postBit}\n\nMy draft comment:\n${prompt}\n\nRewrite my comment so it sounds like I actually typed it.`;
+    return `${postBit}${replyBit}\n\nMy draft comment:\n${prompt}\n\nRewrite my comment so it sounds like I actually typed it.`;
   }
   if (prompt.trim()) {
-    return `${postBit}\n\nWhat I want to say:\n${prompt}\n\nWrite the comment I would actually leave.`;
+    return `${postBit}${replyBit}\n\nWhat I want to say:\n${prompt}\n\nWrite the comment I would actually leave.`;
+  }
+  if (replyToComment) {
+    return `${postBit}${replyBit}\n\nWrite a short reply I would actually leave on that comment.`;
   }
   return `${postBit}\n\nWrite a short comment I would actually leave on this post.`;
 }
@@ -116,6 +128,8 @@ export async function POST(request: NextRequest) {
       kind = "caption",
       postContent = "",
       postAuthor = "",
+      replyToComment = "",
+      replyToAuthor = "",
     } = await request.json();
 
     const isComment = kind === "comment";
@@ -135,7 +149,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (isComment && !isImprove && !prompt?.trim() && !postContent?.trim()) {
+    if (
+      isComment &&
+      !isImprove &&
+      !prompt?.trim() &&
+      !postContent?.trim() &&
+      !replyToComment?.trim()
+    ) {
       return NextResponse.json(
         { success: false, error: "Nothing to comment on yet" },
         { status: 400 }
@@ -171,6 +191,8 @@ export async function POST(request: NextRequest) {
                 prompt,
                 postContent,
                 postAuthor,
+                replyToComment,
+                replyToAuthor,
               })
             : isImprove
               ? `Rewrite this so it sounds like I actually posted it. Keep my details:\n${prompt}`

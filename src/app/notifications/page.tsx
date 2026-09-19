@@ -41,7 +41,7 @@ async function NotificationsList() {
       case "LIKE":
         return "liked your post";
       case "COMMENT":
-        return "commented on your post";
+        return "commented or replied";
       default:
         return "sent you a notification";
     }

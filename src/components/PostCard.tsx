@@ -14,6 +14,51 @@ import { Textarea } from './ui/textarea';
 
 type Posts = Awaited<ReturnType<typeof getPosts>>;
 type Post = Posts[number];
+type CommentItem = Post["comments"][number] & { parentId?: string | null };
+
+function getParentId(comment: CommentItem) {
+  return comment.parentId ?? null;
+}
+
+function CommentRow({
+  comment,
+  canReply,
+  onReply,
+}: {
+  comment: CommentItem;
+  canReply: boolean;
+  onReply: () => void;
+}) {
+  return (
+    <div className="flex space-x-3">
+      <Avatar className="size-8 flex-shrink-0">
+        <AvatarImage src={comment.author.image ?? "/avatar.png"} />
+      </Avatar>
+      <div className="flex-1 min-w-0">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="font-medium text-sm">{comment.author.name}</span>
+          <span className="text-sm text-muted-foreground">
+            @{comment.author.username}
+          </span>
+          <span className="text-sm text-muted-foreground">·</span>
+          <span className="text-sm text-muted-foreground">
+            {formatDistanceToNow(new Date(comment.createdAt))} ago
+          </span>
+        </div>
+        <p className="text-sm break-words">{comment.content}</p>
+        {canReply && (
+          <button
+            type="button"
+            onClick={onReply}
+            className="mt-1 text-xs font-medium text-muted-foreground hover:text-blue-500"
+          >
+            Reply
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 interface PostCardProps {
   post: Post;
@@ -43,6 +88,7 @@ function PostCard({ post, dbUserId, currentUserId, onDelete, showDelete = true }
   const [optimisticLikes, setOptimisticLikes] = useState(post._count.likes || 0);
   const [showComments, setShowComments] = useState(false);
   const [commentAiMode, setCommentAiMode] = useState<"generate" | "improve" | null>(null);
+  const [replyTo, setReplyTo] = useState<CommentItem | null>(null);
   const isCommentAiBusy = commentAiMode !== null;
 
   const callCommentAI = async (action: "generate" | "improve") => {
@@ -55,6 +101,8 @@ function PostCard({ post, dbUserId, currentUserId, onDelete, showDelete = true }
         kind: "comment",
         postContent: post.content || "",
         postAuthor: post.author.username || post.author.name || "",
+        replyToComment: replyTo?.content || "",
+        replyToAuthor: replyTo?.author.username || replyTo?.author.name || "",
       }),
     });
 
@@ -113,16 +161,22 @@ function PostCard({ post, dbUserId, currentUserId, onDelete, showDelete = true }
     if (!newComment.trim() || isCommenting) return;
     try {
       setIsCommenting(true);
-      const result = await createComment(post.id, newComment);
+      const result = await createComment(post.id, newComment, replyTo?.id);
       if (result?.success) {
-        toast.success("Comment posted successfully");
+        toast.success(replyTo ? "Reply posted" : "Comment posted successfully");
         setNewComment("");
+        setReplyTo(null);
       }
     } catch (error) {
       toast.error("Failed to add comment");
     } finally {
       setIsCommenting(false);
     }
+  };
+
+  const startReply = (comment: CommentItem) => {
+    setReplyTo(comment);
+    setShowComments(true);
   };
 
   const handleDelete = async () => {
@@ -233,26 +287,45 @@ function PostCard({ post, dbUserId, currentUserId, onDelete, showDelete = true }
           {showComments && (
             <div className="space-y-4 pt-4 border-t">
               <div className="space-y-4">
-                {post.comments.map((comment) => (
-                  <div key={comment.id} className="flex space-x-3">
-                    <Avatar className="size-8 flex-shrink-0">
-                      <AvatarImage src={comment.author.image ?? "/avatar.png"} />
-                    </Avatar>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                        <span className="font-medium text-sm">{comment.author.name}</span>
-                        <span className="text-sm text-muted-foreground">
-                          @{comment.author.username}
-                        </span>
-                        <span className="text-sm text-muted-foreground">·</span>
-                        <span className="text-sm text-muted-foreground">
-                          {formatDistanceToNow(new Date(comment.createdAt))} ago
-                        </span>
+                {post.comments
+                  .filter((comment) => !getParentId(comment))
+                  .map((comment) => {
+                    const replies = post.comments.filter(
+                      (item) => getParentId(item) === comment.id
+                    );
+                    return (
+                      <div key={comment.id} className="space-y-3">
+                        <CommentRow
+                          comment={comment}
+                          canReply={!!user}
+                          onReply={() => startReply(comment)}
+                        />
+                        {replies.map((reply) => {
+                          const nestedReplies = post.comments.filter(
+                            (item) => getParentId(item) === reply.id
+                          );
+                          return (
+                            <div key={reply.id} className="ml-8 space-y-3 sm:ml-10">
+                              <CommentRow
+                                comment={reply}
+                                canReply={!!user}
+                                onReply={() => startReply(reply)}
+                              />
+                              {nestedReplies.map((nested) => (
+                                <div key={nested.id} className="ml-6 sm:ml-8">
+                                  <CommentRow
+                                    comment={nested}
+                                    canReply={!!user}
+                                    onReply={() => startReply(nested)}
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        })}
                       </div>
-                      <p className="text-sm break-words">{comment.content}</p>
-                    </div>
-                  </div>
-                ))}
+                    );
+                  })}
               </div>
 
               {user ? (
@@ -260,9 +333,29 @@ function PostCard({ post, dbUserId, currentUserId, onDelete, showDelete = true }
                   <Avatar className="size-8 flex-shrink-0">
                     <AvatarImage src={user?.imageUrl || "/avatar.png"} />
                   </Avatar>
-                  <div className="flex-1">
+                  <div className="flex-1 min-w-0">
+                    {replyTo && (
+                      <div className="mb-2 flex items-center justify-between gap-2 rounded-md bg-muted/50 px-2 py-1.5 text-xs">
+                        <p className="min-w-0 truncate text-muted-foreground">
+                          Replying to <span className="font-medium text-foreground">@{replyTo.author.username}</span>
+                          {": "}
+                          {replyTo.content}
+                        </p>
+                        <button
+                          type="button"
+                          className="shrink-0 text-muted-foreground hover:text-foreground"
+                          onClick={() => setReplyTo(null)}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    )}
                     <Textarea
-                      placeholder="Write a comment, or tap Generate..."
+                      placeholder={
+                        replyTo
+                          ? `Reply to @${replyTo.author.username}...`
+                          : "Write a comment, or tap Generate..."
+                      }
                       value={newComment}
                       onChange={(e) => setNewComment(e.target.value)}
                       className="min-h-[80px] resize-none"
@@ -308,7 +401,7 @@ function PostCard({ post, dbUserId, currentUserId, onDelete, showDelete = true }
                         ) : (
                           <>
                             <SendIcon className="size-4" />
-                            Comment
+                            {replyTo ? "Reply" : "Comment"}
                           </>
                         )}
                       </Button>

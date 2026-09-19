@@ -60,14 +60,18 @@ model Comment{
   content String
   authorId String
   postId String
+  parentId String?
   createdAt DateTime @default(now())
 
   // Relations
   author User @relation(fields: [authorId],references: [id],onDelete: Cascade)
   post Post @relation(fields: [postId],references: [id], onDelete: Cascade)
+  parent Comment? @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies Comment[] @relation("CommentReplies")
   notifications Notification[]
 
-  @@index([authorId,postId]) // composite index for faster queries
+  @@index([authorId,postId])
+  @@index([parentId])
 }
 
 model Like {

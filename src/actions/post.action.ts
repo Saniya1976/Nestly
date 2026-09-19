@@ -144,7 +144,7 @@ export async function toggleLike(postId: string) {
     return { success: false, error: "Failed to toggle like" };
   }
 }
-export async function createComment(postId: string, content: string) {
+export async function createComment(postId: string, content: string, parentId?: string) {
   try {
     const userId = await getDbUserId();
 
@@ -158,19 +158,40 @@ export async function createComment(postId: string, content: string) {
 
     if (!post) throw new Error("Post not found");
 
+    let parentAuthorId: string | null = null;
+    if (parentId) {
+      const parent = await prisma.comment.findUnique({
+        where: { id: parentId },
+        select: { id: true, postId: true, authorId: true },
+      });
+      if (!parent || parent.postId !== postId) {
+        throw new Error("Comment to reply to was not found");
+      }
+      parentAuthorId = parent.authorId;
+    }
+
     const comment = await prisma.comment.create({
       data: {
         content,
         authorId: userId,
         postId,
+        parentId: parentId || null,
       },
     });
 
+    const notifyUserIds = new Set<string>();
+    if (parentAuthorId && parentAuthorId !== userId) {
+      notifyUserIds.add(parentAuthorId);
+    }
     if (post.authorId !== userId) {
+      notifyUserIds.add(post.authorId);
+    }
+
+    for (const recipientId of notifyUserIds) {
       await prisma.notification.create({
         data: {
           type: "COMMENT",
-          userId: post.authorId,
+          userId: recipientId,
           creatorId: userId,
           postId,
           commentId: comment.id,
